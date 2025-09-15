@@ -1,31 +1,66 @@
 name: Automatisation des tests
 on: push
+
 jobs:
   Compilation:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout du dépôt
+        uses: actions/checkout@v4
+
       - name: Compilation
         run: |
-          last_directory=$(basename ${{ runner.workspace }})
-          git clone https://github.com/${{ github.repository }}.git
-          cd ./$last_directory
-          mkdir build
+          mkdir -p build
           cd build
           cmake ..
           make
-          make test
 
-  Test_Add:
+      - name: Upload du binaire
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-bin
+          path: build/src/calculator
+
+  Run_Tests:
     runs-on: ubuntu-latest
     needs: Compilation
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: add
+            args: "add 2 3"
+            expected: "5.000000"
+          - name: sub
+            args: "sub 3 -2"
+            expected: "5.000000"
+          - name: mul
+            args: "mul 5 5"
+            expected: "25.000000"
+          - name: div
+            args: "div 1 5"
+            expected: "0.200000"
+          - name: car
+            args: "car 5"
+            expected: "25.000000"
     steps:
-      - name: Test fonction add
+      - name: Récupération du binaire compilé
+        uses: actions/download-artifact@v4
+        with:
+          name: calculator-bin
+          path: bin
+
+      - name: Test ${{ matrix.name }}
         run: |
-          last_directory=$(basename ${{ runner.workspace }})
-          git clone https://github.com/${{ github.repository }}.git
-          cd ./$last_directory
-          mkdir build
-          cd build
-          cmake ..
-          make
-          ./src/calculator add 10 5
+          chmod +x bin/calculator
+          out=$(./bin/calculator ${{ matrix.args }})
+          echo "Sortie: $out"
+          test "$out" = "${{ matrix.expected }}"
+
+  Deploy:
+    runs-on: ubuntu-latest
+    needs: [Run_Tests]
+    if: ${{ success() }}
+    steps:
+      - name: Déploiement
+        run: echo "Déploiement de la solution"
